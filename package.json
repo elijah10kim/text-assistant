@@ -1,0 +1,18 @@
+{
+  "name": "text-assistant",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Self-hosted, privacy-first personal AI assistant (OpenClaw + Claude API)",
+  "scripts": {
+    "setup": "./scripts/setup.sh",
+    "start": "openclaw gateway run",
+    "status": "openclaw gateway status",
+    "doctor": "openclaw doctor"
+  },
+  "dependencies": {
+    "openclaw": "2026.5.12"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

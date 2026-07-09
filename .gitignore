@@ -14,7 +14,6 @@ vectordb/
 
 # Node
 node_modules/
-package-lock.json
 
 # OpenClaw workspace data
 .openclaw/
