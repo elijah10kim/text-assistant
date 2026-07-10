@@ -39,10 +39,17 @@ npx openclaw config set agents.defaults.heartbeat.every "0m"
 
 # "coding" is OpenClaw's default profile (shell/file/runtime access) — unnecessary
 # attack surface for a chat-only assistant. "messaging" + web keeps search working
-# without exec/filesystem tools. MCP integrations (Gmail, Calendar, etc. in later
+# without exec/runtime tools. MCP integrations (Gmail, Calendar, etc. in later
 # phases) aren't affected by this — profiles only gate built-in tools.
+#
+# read/write/edit and memory_get/memory_search (group:memory) are also "coding"-only
+# by default, which silently breaks the built-in MEMORY.md + daily-notes system on
+# "messaging" — the model reports "saved" but has no tool that can actually write the
+# file. Re-added narrowly (no exec, no apply_patch) and scoped to the workspace dir
+# only via tools.fs.workspaceOnly, so this doesn't reopen general filesystem access.
 npx openclaw config set tools.profile messaging
-npx openclaw config set tools.alsoAllow '["group:web"]' --strict-json
+npx openclaw config set tools.alsoAllow '["group:web", "group:memory", "read", "write", "edit"]' --strict-json
+npx openclaw config set tools.fs.workspaceOnly true --strict-json
 
 # Default verbose mode leaks tool-call activity (e.g. "web_fetch: ...") as its own
 # outbound message on chat channels — not something a texting-style assistant should show.
@@ -59,6 +66,42 @@ npx openclaw config set agents.defaults.verboseDefault off
 npx openclaw config set channels.telegram.streaming.mode progress
 npx openclaw config set channels.telegram.streaming.progress.toolProgress false --strict-json
 npx openclaw config set channels.telegram.streaming.progress.labels '["on it", "checking now", "got it", "one sec", "looking into it"]' --strict-json
+
+# Memory search (semantic/vector recall over MEMORY.md and daily notes) defaults to
+# ON with OpenAI as the embedding provider — a second cloud provider this project
+# avoids (see docs/DESIGN.md "Resolved decisions"). The plain-text MEMORY.md + daily
+# notes system (memory/YYYY-MM-DD.md) still works fully without this; it's driven by
+# agents.defaults.startupContext, which is on by default and needs no config here.
+npx openclaw config set agents.defaults.memorySearch.enabled false --strict-json
+
+# In-conversation "write it down proactively" instructions aren't reliable enough
+# alone (tested — the model skipped the memory write most of the time). This once-daily
+# job reviews the day's Telegram conversation and consolidates anything durable into
+# MEMORY.md / memory/YYYY-MM-DD.md. --no-deliver keeps it silent (no Telegram message).
+#
+# sessions_history defaults to "tree" visibility (only the job's own session), which
+# blocks it from reading the Telegram session at all. "agent" widens it to any session
+# under our single "main" agent — still scoped to just this agent, not cross-agent.
+npx openclaw config set tools.sessions.visibility agent
+#
+# Note: cron add/edit need operator.write scope. A fresh CLI device is usually only
+# pre-approved for operator.read, so this may need a one-time manual approval: if it
+# errors with "scope upgrade pending approval", run
+# `openclaw devices approve --latest --token "$GATEWAY_TOKEN"` and re-run this block.
+GATEWAY_TOKEN=$(python3 -c "import json; print(json.load(open('$HOME/.openclaw/openclaw.json')).get('gateway',{}).get('auth',{}).get('token',''))")
+npx openclaw cron add \
+  --name "Daily memory consolidation" \
+  --description "Reviews the day's Telegram conversation and distills anything durable into MEMORY.md / today's daily note" \
+  --cron "7 0 * * *" \
+  --tz "America/Toronto" \
+  --agent main \
+  --session isolated \
+  --tools "read write edit sessions_history sessions_list" \
+  --timeout-seconds 300 \
+  --expect-final \
+  --no-deliver \
+  --message "Daily memory consolidation. Use sessions_history to review today's conversation in session key agent:main:telegram:direct:$TELEGRAM_ALLOWED_USER_ID (the direct chat with Elijah). Read MEMORY.md first so you don't duplicate what's already saved. Identify anything durable worth keeping long-term: decisions made, preferences stated, facts about Elijah, things researched or compared, ongoing goals or interests. Write concise, factual entries, no narration: lasting facts/preferences go in MEMORY.md, a log of what happened goes in memory/YYYY-MM-DD.md for today's date (create memory/ if it doesn't exist). If nothing noteworthy happened today, do nothing -- don't write empty or filler entries. This is a silent background task, do not send a message to any chat." \
+  --token "$GATEWAY_TOKEN"
 
 chmod 600 .env
 find "$HOME/.openclaw" -type f -exec chmod 600 {} \; 2>/dev/null
