@@ -35,9 +35,9 @@ Calendar          Assistant   Scheduler
 
 ## Privacy model
 
-- All conversation data, memory, and integrations stored locally (SQLite + Chroma vector DB)
+- All conversation data, memory, and integrations stored locally (OpenClaw's built-in `MEMORY.md` + daily notes, SQLite-backed)
 - Gateway binds to localhost — no ports exposed to the internet
-- API keys encrypted at rest via macOS Keychain
+- API keys stored in `.env` and OpenClaw's local config, restricted to owner-only file permissions (not Keychain-encrypted)
 - Claude API used for all reasoning (Anthropic does not train on API inputs, though data does transit their servers per request)
 
 ## Setup
@@ -53,7 +53,7 @@ Copy `.env.example` to `.env` and fill in your API keys. See the example file fo
 | Phase | Status | What |
 |---|---|---|
 | 1 | 🔨 | OpenClaw + Telegram + Claude API |
-| 2 | ⬜ | Memory (SQLite + Chroma + auto-compaction) |
+| 2 | ⬜ | Memory (OpenClaw's built-in MEMORY.md + daily notes) |
 | 3 | ⬜ | BlueBubbles + iMessage |
 | 4 | ⬜ | Google Calendar + Gmail |
 | 5 | ⬜ | Proactivity engine (cron + briefings + reminders) |

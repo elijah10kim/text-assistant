@@ -54,17 +54,22 @@ The Gateway binds to localhost only. Remote access, if ever needed, goes through
 
 ### Layer 3 — memory
 
+Uses OpenClaw's built-in memory system rather than a custom-built store. It already provides most of what a from-scratch SQLite + vector DB build would — curation, truncation-awareness, consolidation — without the extra engineering.
+
 | Component | Role |
 |---|---|
-| SQLite | Conversation log, user profile (key facts, preferences, habits), reminders, scheduled tasks |
-| Chroma (or similar vector DB) | Semantic search over past conversations — "what did I say about X last month" |
+| `MEMORY.md` | Curated long-term facts and preferences, loaded into context at the start of every session |
+| `memory/YYYY-MM-DD.md` | Raw daily notes — what happened, day by day |
+| SQLite (OpenClaw-managed) | Backing store for the above, plus reminders and scheduled tasks |
 
 **How memory works:**
 
-1. **Conversation log.** Every message (yours and the assistant's) is stored with a timestamp. This is the raw record.
-2. **User profile.** A structured store of facts the assistant has learned about you: name, location, workplace, preferences, habits, important dates, etc. Updated incrementally as new facts surface in conversation.
-3. **Auto-compaction.** When the conversation context approaches the model's token limit, the system summarizes older messages into a compressed form and stores the summary. Recent messages stay verbatim; older ones are replaced by their summary. The assistant can always search the full conversation log via the vector DB if it needs to recall something specific from further back.
-4. **Semantic recall.** Before responding, the agent queries the vector DB with the current message to pull in relevant past context. This is how it "remembers" things you said weeks ago without keeping the entire history in the prompt.
+1. **Daily notes.** Relevant events and context get written to that day's file as they happen — the raw record.
+2. **Consolidation.** OpenClaw periodically distills daily notes into `MEMORY.md` (its "dreaming" pass), keeping the curated file small and current.
+3. **Session start.** `MEMORY.md` loads into context at the start of every session — this is how the assistant remembers you without you re-explaining yourself each time.
+4. **No vector/semantic search, for now.** `MEMORY.md` + daily notes cover "remembers key things about me" well. Digging up a specific buried detail from months back isn't supported yet — deferred until it's an actual problem in practice, not built preemptively.
+
+**If semantic search is needed later:** OpenClaw supports it (`memory_search`, hybrid vector + keyword), but its default embedding provider is OpenAI — a second cloud provider this project avoids (see "Local model (Ollama)" in Resolved decisions). The plan, if this becomes necessary, is a locally-run embedding-only model (e.g. via Ollama) rather than any cloud embeddings API — a much lighter workload than the full local chat model this design already cut (embedding models are 10-100x smaller, one fast forward pass instead of token-by-token generation), and one that should run fine even on older hardware like a 2018 Intel Mac mini.
 
 ### Layer 4 — integrations and tools
 
@@ -120,7 +125,7 @@ A scheduler (cron-based) that wakes the agent at configured intervals to check f
 |---|---|
 | Network exposure | Gateway binds to localhost only. No ports exposed to the internet. |
 | Remote access (if needed) | Tailscale mesh VPN — encrypted, zero-config, no port forwarding |
-| API keys and tokens | Stored encrypted at rest (age/sops or macOS Keychain). Never in plaintext config files. |
+| API keys and tokens | Stored in `.env` and OpenClaw's local config, restricted to owner-only file permissions (`600`/`700`). At-rest protection comes from FileVault (full-disk encryption), which is on. |
 | BlueBubbles auth | Local connection only (same machine), token-based |
 
 ### Hardware requirements (MacBook, Apple Silicon)
@@ -207,6 +212,7 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 | Fallback channel | Telegram as auto-failover only. Gateway health-checks BlueBubbles every 30s; if down, routes to Telegram automatically. Switches back when iMessage recovers. Telegram is dormant during normal operation. |
 | Voice notes | Yes. Transcribed via a standalone Whisper installation, then processed as text. |
 | Local model (Ollama) | Removed from the design. All reasoning goes through Claude API for simplicity — no model routing logic, no local hardware requirement, no second model to maintain. Trade-off: financial/personal data now transits Anthropic's API (not used for training) rather than staying strictly on-device. |
+| Memory system | OpenClaw's built-in `MEMORY.md` + daily notes (SQLite-backed) instead of a custom-built store — already handles curation, truncation-awareness, and consolidation. No vector/semantic search for now: its default embedding provider is OpenAI, a second cloud provider this project avoids. If needed later, self-hosted via a local embedding-only model (e.g. Ollama), not a cloud API. |
 
 ## Remaining considerations
 
@@ -224,10 +230,11 @@ Public repo — safe for portfolio visibility as long as secrets are excluded. I
 
 **`.gitignore` must exclude:**
 - `.env` (API keys: Claude, Telegram bot token, Google OAuth client secret)
-- `*.db` / `*.sqlite` (conversation logs, user profile — your personal data)
-- `chroma/` or any vector DB directory (your memory/embeddings)
+- `*.db` / `*.sqlite` (in case any personal data ever lands inside the repo directly)
 - Any config files containing your Apple ID, phone number, or Telegram user ID
 - `node_modules/`
+
+Note: OpenClaw's actual runtime state — config, workspace/personality files, `MEMORY.md`, daily notes, sessions — lives entirely under `~/.openclaw`, outside this repo. It's never a git-tracked concern here; see "Deploying to Mac mini" below for how that state moves separately.
 
 **Include in the repo:**
 - `.env.example` with placeholder values showing what variables are needed
@@ -241,9 +248,10 @@ Once a Mac mini is ready, migration is:
 
 1. Install Node.js and BlueBubbles on the Mac mini
 2. `git clone` the repo
-3. Copy `.env` and database files from MacBook to Mac mini (via `scp` or AirDrop)
-4. `npm install`
-5. Start the Gateway
+3. Copy `.env` to the Mac mini
+4. Copy `~/.openclaw` wholesale (config, workspace/personality files, memory, sessions — everything OpenClaw needs lives here, only a few MB) via `scp`, AirDrop, or an external drive
+5. `npm install`
+6. Start the Gateway
 
 After initial deployment, pushing updates from MacBook to Mac mini:
 
@@ -262,7 +270,7 @@ A suggested sequence, each phase is independently useful:
 | Phase | What | Outcome |
 |---|---|---|
 | 1 | Install OpenClaw + Telegram bot + Claude API key | Working chatbot you can text, with web search |
-| 2 | Add memory layer (SQLite + Chroma + auto-compaction) | Assistant remembers you across sessions |
+| 2 | Wire up memory (OpenClaw's built-in `MEMORY.md` + daily notes) | Assistant remembers you across sessions |
 | 3 | Add BlueBubbles + iMessage channel (Telegram becomes auto-failover) | Same assistant, now in iMessage with automatic Telegram fallback |
 | 4 | Add Google Calendar + Gmail integrations (OAuth setup) | Can read/write your schedule and inbox |
 | 5 | Add proactivity engine (cron + daily briefing + bill reminders) | Morning summaries, CC due date reminders, email digests |

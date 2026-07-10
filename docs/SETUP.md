@@ -115,7 +115,7 @@ This surfaces any risky configurations (e.g., DM policies that are too open, mis
 
 ## What's next
 
-Phase 2: Add the memory layer (SQLite + Chroma + auto-compaction). See `docs/DESIGN.md` for the full build order.
+Phase 2: Wire up memory (OpenClaw's built-in `MEMORY.md` + daily notes). See `docs/DESIGN.md` for the full build order.
 
 ## Troubleshooting
 

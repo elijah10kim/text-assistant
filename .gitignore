@@ -8,10 +8,6 @@
 *.sqlite
 *.sqlite3
 
-# Vector DB / memory store
-chroma/
-vectordb/
-
 # Node
 node_modules/
 
