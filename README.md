@@ -1,10 +1,10 @@
 # Personal AI Assistant
 
-A self-hosted, privacy-first personal AI assistant accessible via iMessage (with Telegram auto-failover). Built on [OpenClaw](https://github.com/openclaw/openclaw).
+A self-hosted, privacy-first personal AI assistant accessible via iMessage (with Telegram as a secondary channel). Built on [OpenClaw](https://github.com/openclaw/openclaw).
 
 ## Current deployment phase
 
-Everything runs on one machine — the MacBook used for development — for now. BlueBubbles and the OpenClaw Gateway run together on it. Once the build is stable, both migrate to a dedicated always-on Mac mini so the assistant runs 24/7 independent of the MacBook.
+Everything runs on one machine — the MacBook used for development — for now. The OpenClaw Gateway and its iMessage bridge (`imsg`) run together on it. Once the build is stable, both migrate to a dedicated always-on Mac mini so the assistant runs 24/7 independent of the MacBook.
 
 ## What it does
 
@@ -15,14 +15,14 @@ Everything runs on one machine — the MacBook used for development — for now.
 - **Calendar + email** — reads/writes Google Calendar and Gmail, drafts replies, schedules meetings
 - **Image + voice understanding** — send photos or voice notes, get text responses
 - **Smart home control** — manage Alexa/Google Home devices via text (through Home Assistant)
-- **Auto-failover** — if iMessage goes down, switches to Telegram automatically
+- **Secondary channel** — Telegram runs on the same Gateway as a backup surface for channel-level iMessage failures
 
 ## Architecture
 
 ```
 You (iMessage / Telegram)
         │
-   BlueBubbles / Telegram Bot
+   imsg (child process) / Telegram Bot
         │
    OpenClaw Gateway (localhost only)
         │
@@ -54,7 +54,7 @@ Copy `.env.example` to `.env` and fill in your API keys. See the example file fo
 |---|---|---|
 | 1 | 🔨 | OpenClaw + Telegram + Claude API |
 | 2 | ⬜ | Memory (OpenClaw's built-in MEMORY.md + daily notes) |
-| 3 | ⬜ | BlueBubbles + iMessage |
+| 3 | ⬜ | iMessage via `imsg` (Basic tier, dedicated Apple ID) |
 | 4 | ⬜ | Google Calendar + Gmail |
 | 5 | ⬜ | Proactivity engine (cron + briefings + reminders) |
 | 6 | ⬜ | Image understanding + voice transcription (Whisper) |

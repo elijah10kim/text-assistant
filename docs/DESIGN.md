@@ -6,7 +6,9 @@ A self-hosted, privacy-first personal AI assistant accessible primarily via iMes
 
 **Stack:** Claude API (via OpenClaw) for all reasoning. No local/self-hosted LLM (Ollama removed from scope — see "Resolved decisions" below).
 
-**Current deployment phase:** Everything (OpenClaw Gateway + BlueBubbles) runs on one machine — your MacBook — for development and testing. This is temporary. Once the build is stable, BlueBubbles + Gateway migrate to a dedicated always-on Mac mini so the assistant runs 24/7 without depending on the MacBook staying awake. See "Always-on considerations" and "Version control and deployment" below for that migration path.
+**Current deployment phase:** Everything (OpenClaw Gateway + the iMessage bridge) runs on one machine — your MacBook — for development and testing. This is temporary. Once the build is stable, the Gateway + iMessage bridge migrate to a dedicated always-on Mac mini so the assistant runs 24/7 without depending on the MacBook staying awake. See "Always-on considerations" and "Version control and deployment" below for that migration path.
+
+> **iMessage transport note:** OpenClaw removed BlueBubbles support. iMessage now runs through OpenClaw's bundled iMessage channel backed by the [`imsg`](https://github.com/steipete/imsg) CLI — the Gateway spawns `imsg` as a child process and talks JSON-RPC over stdin/stdout. There is no separate server, port, or webhook. This changed the design throughout; earlier BlueBubbles references have been updated.
 
 ---
 
@@ -14,7 +16,7 @@ A self-hosted, privacy-first personal AI assistant accessible primarily via iMes
 
 - **Privacy-conscious, cloud-reasoning.** All conversation data, memory, and integrations run on your own hardware. The Claude API handles all reasoning — Anthropic does not train on API inputs, but data does transit to and get processed on Anthropic's servers for each request.
 - **Confirm before acting.** High-stakes actions (sending emails, booking reservations) require your explicit confirmation. Low-stakes actions (setting a reminder, looking something up) proceed automatically.
-- **One machine for now, dedicated hardware later.** Development and initial testing run entirely on your MacBook (BlueBubbles + Gateway together). Once stable, migrate BlueBubbles + Gateway to a dedicated Mac mini for true 24/7 uptime — the MacBook then becomes just a dev machine again.
+- **One machine for now, dedicated hardware later.** Development and initial testing run entirely on your MacBook (Gateway + `imsg` together). Once stable, migrate the Gateway + `imsg` to a dedicated Mac mini for true 24/7 uptime — the MacBook then becomes just a dev machine again.
 
 ---
 
@@ -24,15 +26,26 @@ A self-hosted, privacy-first personal AI assistant accessible primarily via iMes
 
 | Component | Role |
 |---|---|
-| BlueBubbles (on macOS — currently your MacBook, later a dedicated Mac mini) | Bridges iMessage to the Gateway via REST API / webhooks |
-| Telegram bot (auto-failover) | Dormant unless BlueBubbles is unreachable. Gateway health-checks BlueBubbles; if it fails, proactive notifications route to Telegram and you can chat there until iMessage recovers. |
+| `imsg` CLI (on macOS — currently your MacBook, later a dedicated Mac mini) | Bridges iMessage to the Gateway. The Gateway spawns it as a child process and speaks JSON-RPC over stdin/stdout. Reads inbound messages from the Messages database (`chat.db`) and sends via Messages.app. No server, port, or webhook. |
+| Telegram bot (secondary channel) | A second messaging surface on the same Gateway. Stays available as a backup for proactive notifications and chat. See "Channel roles and failover" below for what it can and can't cover. |
 | OpenClaw Gateway | Single Node.js process; receives normalized messages from all channels, routes them to the agent, returns responses |
 
 The Gateway binds to localhost only. Remote access, if ever needed, goes through Tailscale — never port-forwarded.
 
-**Access control:** The assistant responds only to one Apple ID (yours) on iMessage and one Telegram account. All other inbound messages are ignored. Configured via BlueBubbles `allowFrom` and Telegram bot allowlist.
+**Access control:** The assistant responds only to one Apple ID (yours) on iMessage and one Telegram account. All other inbound messages are ignored. Configured via the iMessage channel's `allowFrom` (by handle — phone number or email) and the Telegram bot allowlist.
 
-**Auto-failover logic:** The Gateway pings BlueBubbles on a heartbeat (every 30s). If BlueBubbles is healthy, all outbound messages go through iMessage and inbound Telegram messages are ignored. If BlueBubbles fails the heartbeat, the Gateway switches to Telegram for both proactive notifications and interactive conversation. When BlueBubbles recovers, it switches back automatically.
+**Assistant identity — dedicated Apple ID (recommended):** The Mac running `imsg` should sign Messages into a *dedicated* Apple ID that belongs to the assistant, not your primary personal Apple ID. You then text the assistant from your own iPhone/primary Apple ID — it's simply a separate contact, and `allowFrom` is set to your primary handle so it only answers you. This keeps your primary iCloud identity (photos, backups, Find My, payment) off the assistant's machine entirely, which sharply limits the blast radius if that machine is ever compromised — and it matters more once Private API mode (below) is on the table, since that involves weakening the machine's OS protections.
+
+**Channel roles and failover:** iMessage is the primary channel; Telegram is a secondary surface on the same Gateway. Note an architectural limit that the old BlueBubbles design glossed over: because `imsg` and the Gateway run on the *same* machine, if that machine is off or asleep the whole Gateway is down — there is nothing left running to fail *over* to. Telegram-as-backup therefore only helps for iMessage-*channel*-level failures while the Gateway is still up (e.g. `imsg` crashed, Messages signed out, an iMessage outage), not for whole-host outages. The old "Gateway pings a BlueBubbles REST server every 30s" mechanism no longer exists (there is no server to ping); health here is the `imsg` subprocess/probe state. The exact detection-and-route-switch behavior is a Phase 3 detail to wire up and verify, not something to treat as free.
+
+**iMessage capability tiers (`imsg`):** the bundled channel has two levels, and which one we target is a deliberate security decision:
+
+| Tier | What works | Requirement |
+|---|---|---|
+| **Basic** (current target) | Send/receive text, images, voice notes; message history; reply-to | Full Disk Access + Automation permissions. **SIP stays on.** |
+| **Private API** (deferred) | Everything in Basic, plus tapbacks/reactions, typing indicators, read receipts, threaded replies, effects, polls, group management | `imsg launch` with **System Integrity Protection (SIP) disabled** on the Messages Mac |
+
+**Decision:** target **Basic** for now. What Basic loses is cosmetic (the assistant can't send reactions or a native typing indicator — the short "on it" ack message covers the "I'm working on it" signal instead). Disabling SIP is a system-wide weakening of a core macOS protection, which cuts against this project's security posture, so it is not worth it on the MacBook for typing indicators. **Private API is revisited as a deliberate Mac-mini-phase decision** — on a dedicated single-purpose appliance signed into a *dedicated* Apple ID (see above), behind a private network, the realistic threat SIP defends against is small and the cost of turning it off is far more contained than on a daily-driver laptop. Deferred, not ruled out.
 
 **iMessage capabilities to support:**
 - Inbound/outbound text messages
@@ -48,9 +61,9 @@ The Gateway binds to localhost only. Remote access, if ever needed, goes through
 
 **Web search:** Claude API supports web search as a built-in tool. The agent can search the web and cite sources in response to any query. No separate search API needed.
 
-**Image understanding:** Claude API supports vision natively. When you send an image via iMessage, BlueBubbles forwards it as base64, and the Gateway includes it in the Claude API call as an image content block.
+**Image understanding:** Claude API supports vision natively. When you send an image via iMessage, `imsg` surfaces the attachment from the Messages database, and the Gateway includes it in the Claude API call as an image content block. (Attachment forwarding is gated by the channel's `includeAttachments` setting, with a `mediaMaxMb` cap.)
 
-**Voice note transcription:** When you send a voice note via iMessage, BlueBubbles captures the audio file. The Gateway runs it through a standalone Whisper installation (lightweight, runs on CPU) to produce a text transcript, then processes the transcript as a normal text message.
+**Voice note transcription:** When you send a voice note via iMessage, `imsg` exposes the audio attachment from the Messages database. The Gateway runs it through a standalone Whisper installation (lightweight, runs on CPU) to produce a text transcript, then processes the transcript as a normal text message.
 
 ### Layer 3 — memory
 
@@ -112,7 +125,7 @@ A scheduler (cron-based) that wakes the agent at configured intervals to check f
 1. Cron fires at the scheduled time.
 2. The system gathers fresh context (new emails, calendar for today, stored bill due dates, etc.) using cheap API calls — no LLM involved yet.
 3. Raw context is passed to Claude with the prompt: "Based on this context and what you know about the user, is there anything worth notifying them about right now? If not, stay silent."
-4. If Claude decides yes, it composes a message and sends it via BlueBubbles to your iMessage.
+4. If Claude decides yes, it composes a message and sends it via `imsg` to your iMessage.
 5. If Claude decides no, nothing happens — no cost, no noise.
 
 ---
@@ -126,7 +139,8 @@ A scheduler (cron-based) that wakes the agent at configured intervals to check f
 | Network exposure | Gateway binds to localhost only. No ports exposed to the internet. |
 | Remote access (if needed) | Tailscale mesh VPN — encrypted, zero-config, no port forwarding |
 | API keys and tokens | Stored in `.env` and OpenClaw's local config, restricted to owner-only file permissions (`600`/`700`). At-rest protection comes from FileVault (full-disk encryption), which is on. |
-| BlueBubbles auth | Local connection only (same machine), token-based |
+| iMessage bridge (`imsg`) | Local child process, no network surface (no server/port/webhook). Requires Full Disk Access (to read `chat.db`) and Automation permission (to send via Messages.app), granted interactively in macOS System Settings — not scriptable, and re-granted per machine. |
+| macOS SIP | Left **enabled** (Basic tier). Disabling it for Private API features is deferred to the Mac-mini phase, and only on a dedicated single-purpose appliance signed into a dedicated Apple ID. |
 
 ### Hardware requirements (MacBook, Apple Silicon)
 
@@ -144,7 +158,7 @@ No GPU or large RAM requirement since there's no local model to run — the Gate
 A MacBook is fine for development and light use, but sleeps when the lid closes. Options:
 
 - **For now:** Use Amphetamine or `caffeinate -di` to prevent sleep while plugged in and on your desk. Accept the assistant goes quiet when you're traveling with the laptop.
-- **Later (if needed):** Move the Gateway + BlueBubbles to a cheap used Mac mini (even an older Intel model is sufficient, since there's no local model inference to run) that stays plugged in 24/7. The MacBook becomes just a dev machine.
+- **Later (if needed):** Move the Gateway + `imsg` to a cheap used Mac mini (even an older Intel model is sufficient, since there's no local model inference to run) that stays plugged in 24/7. The MacBook becomes just a dev machine. Note: unlike the Gateway's own state (which copies over as files), the iMessage bridge's macOS permissions (Full Disk Access, Automation) must be re-granted interactively on the mini, and Messages must be re-signed into the assistant's dedicated Apple ID there — see "Deploying to Mac mini."
 
 ---
 
@@ -152,22 +166,22 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 
 ### You text: "What's the weather tomorrow?"
 
-1. iMessage → BlueBubbles → Gateway
+1. iMessage → imsg → Gateway
 2. Gateway sends to Claude API
 3. Claude uses built-in web search tool → gets forecast
-4. Response → Gateway → BlueBubbles → iMessage
+4. Response → Gateway → imsg → iMessage
 
 ### You text: "When is my TD Visa due?"
 
-1. iMessage → BlueBubbles → Gateway
+1. iMessage → imsg → Gateway
 2. Gateway sends to Claude API
 3. Claude checks user profile → finds stored due date ("TD Visa: around the 22nd each month, remind 4 days before")
 4. Response: "Your TD Visa is usually due around the 22nd. That's in 5 days — want me to remind you on the 18th?"
-5. Response → Gateway → BlueBubbles → iMessage
+5. Response → Gateway → imsg → iMessage
 
 ### You text: "Email Sarah to reschedule our lunch to Thursday"
 
-1. iMessage → BlueBubbles → Gateway
+1. iMessage → imsg → Gateway
 2. Gateway sends to Claude API
 3. Claude checks calendar for Thursday availability, drafts email
 4. **Confirmation:** "I'll send Sarah this: 'Hi Sarah, could we move lunch to Thursday at 12:30? Let me know if that works.' — Send it?"
@@ -179,7 +193,7 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 1. Cron fires → gathers weather API, calendar API, Gmail API data + checks user profile for upcoming bill due dates
 2. Passes bundle to Claude: "Compose a morning briefing for the user"
 3. Claude drafts: "Good morning — it's 18°C and sunny. You have a dentist appointment at 2pm and a call with Mike at 4. Your TD Visa is due in 3 days. Two emails overnight, one from your landlord about maintenance on the 15th."
-4. Sends via BlueBubbles → appears in iMessage
+4. Sends via imsg → appears in iMessage
 
 ---
 
@@ -188,7 +202,7 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 | Component | Cost |
 |---|---|
 | Claude API (Sonnet 4.6, light-moderate use) | ~$10-25 depending on message volume |
-| OpenClaw + BlueBubbles | Free (open source) |
+| OpenClaw + `imsg` | Free (open source) |
 | Google Calendar + Gmail APIs | $0 (free tier) |
 | Telegram bot | $0 (free) |
 | Bill reminders | $0 (stored in user profile, no external API) |
@@ -208,8 +222,11 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 | Email | Gmail — well-supported MCP servers exist |
 | Smart home | Alexa/Google Home devices exist but no Home Assistant yet. HA will need to be set up as a bridge hub (Phase 7). |
 | Financial tracking | Credit card due date reminders only, stored in user profile. You tell the assistant your due dates once, it reminds you X days before. No Plaid or bank connection needed. Plaid is an optional future add-on if you want live balance amounts — would go through Claude API like everything else. |
-| Multi-user | Single user only. One Apple ID on iMessage, one Telegram account. All other messages ignored. |
-| Fallback channel | Telegram as auto-failover only. Gateway health-checks BlueBubbles every 30s; if down, routes to Telegram automatically. Switches back when iMessage recovers. Telegram is dormant during normal operation. |
+| Multi-user | Single user only. Assistant answers exactly one handle (`allowFrom` = your primary Apple ID / one Telegram account). All other messages ignored. |
+| iMessage transport | OpenClaw's bundled iMessage channel via the `imsg` CLI (BlueBubbles was removed from OpenClaw). Gateway spawns `imsg` as a child process, JSON-RPC over stdio — no server/port/webhook. |
+| iMessage capability tier | **Basic** (send/receive text, media, history; SIP stays on). Private API tier (tapbacks, typing indicators, threaded replies, effects, polls) needs SIP disabled and is deferred to the Mac-mini phase — cosmetic features not worth weakening OS security on the MacBook. |
+| Assistant Apple ID | Dedicated Apple ID for the assistant, signed into Messages on the bridge machine — *not* your primary Apple ID. You text it as a separate contact. Keeps your primary iCloud identity off that machine and contains the blast radius (especially relevant if SIP is ever disabled for Private API). |
+| Fallback channel | Telegram is a secondary channel on the same Gateway, not a true auto-failover for outages. Since `imsg` and the Gateway share a host, a whole-host outage takes both down — Telegram only helps for iMessage-channel-level failures while the Gateway is still running. Detection/route-switch behavior is a Phase 3 detail to build and verify. |
 | Voice notes | Yes. Transcribed via a standalone Whisper installation, then processed as text. |
 | Local model (Ollama) | Removed from the design. All reasoning goes through Claude API for simplicity — no model routing logic, no local hardware requirement, no second model to maintain. Trade-off: financial/personal data now transits Anthropic's API (not used for training) rather than staying strictly on-device. |
 | Memory system | OpenClaw's built-in `MEMORY.md` + daily notes (SQLite-backed) instead of a custom-built store — already handles curation, truncation-awareness, and consolidation. No vector/semantic search for now: its default embedding provider is OpenAI, a second cloud provider this project avoids. If needed later, self-hosted via a local embedding-only model (e.g. Ollama), not a cloud API. |
@@ -246,12 +263,14 @@ Note: OpenClaw's actual runtime state — config, workspace/personality files, `
 
 Once a Mac mini is ready, migration is:
 
-1. Install Node.js and BlueBubbles on the Mac mini
-2. `git clone` the repo
-3. Copy `.env` to the Mac mini
-4. Copy `~/.openclaw` wholesale (config, workspace/personality files, memory, sessions — everything OpenClaw needs lives here, only a few MB) via `scp`, AirDrop, or an external drive
-5. `npm install`
-6. Start the Gateway
+1. Install Node.js on the Mac mini
+2. Sign Messages into the assistant's **dedicated Apple ID** on the mini, then install `imsg` in the same user context that runs the Gateway (`brew install steipete/tap/imsg`)
+3. Grant `imsg` its macOS permissions **interactively** in System Settings — Full Disk Access (read `chat.db`) and Automation (send via Messages.app). This can't be scripted and doesn't transfer from the MacBook; it must be re-approved on the mini.
+4. `git clone` the repo
+5. Copy `.env` to the Mac mini (and update `channels.imessage.cliPath` / any host-specific paths for the mini)
+6. Copy `~/.openclaw` wholesale (config, workspace/personality files, memory, sessions — everything OpenClaw needs lives here, only a few MB) via `scp`, AirDrop, or an external drive
+7. `npm install`
+8. Start the Gateway, then verify iMessage with `openclaw channels status --probe` before retiring the MacBook as the live host
 
 After initial deployment, pushing updates from MacBook to Mac mini:
 
@@ -260,6 +279,16 @@ After initial deployment, pushing updates from MacBook to Mac mini:
 3. SSH into Mac mini → `git pull` → restart Gateway
 
 This keeps the MacBook as the dev machine and the Mac mini as the stable production server. Both always share the exact same codebase.
+
+### Development workflow after migration
+
+You keep developing on the MacBook — the mini is only the always-on host, not a dev machine. What flows over git (code, skills, scripts, cron definitions, config-as-code) is the bulk of development.
+
+One caveat comes from the iMessage transport: `imsg` only actually runs where Messages is signed into the assistant's Apple ID *and* has the macOS permissions granted — which, after migration, is the mini. So a true end-to-end iMessage send/receive can't be tested on the MacBook. It rarely needs to be:
+
+- **Use Telegram as the MacBook dev/test channel.** The agent logic (memory, integrations, prompts, tool behavior) is channel-agnostic, so Telegram exercises the same agent and runs anywhere. iMessage-*specific* behavior gets its final check on the mini (`openclaw channels status --probe` + a real text).
+- **Dev and prod state stay separate automatically.** Each machine has its own `~/.openclaw` (config, memory, sessions), which lives outside the repo (gitignored) — so MacBook dev work never clobbers the mini's real memory. Don't manually copy dev memory over prod.
+- **Optionally use the `--dev` profile.** `openclaw --dev gateway` runs an isolated instance under `~/.openclaw-dev` on a separate port (19001), so you can experiment on the MacBook without touching your main local setup.
 
 ---
 
@@ -271,7 +300,7 @@ A suggested sequence, each phase is independently useful:
 |---|---|---|
 | 1 | Install OpenClaw + Telegram bot + Claude API key | Working chatbot you can text, with web search |
 | 2 | Wire up memory (OpenClaw's built-in `MEMORY.md` + daily notes) | Assistant remembers you across sessions |
-| 3 | Add BlueBubbles + iMessage channel (Telegram becomes auto-failover) | Same assistant, now in iMessage with automatic Telegram fallback |
+| 3 | Add iMessage channel via `imsg` (Basic tier, SIP on; dedicated Apple ID) | Same assistant, now reachable over iMessage; Telegram stays as a secondary channel |
 | 4 | Add Google Calendar + Gmail integrations (OAuth setup) | Can read/write your schedule and inbox |
 | 5 | Add proactivity engine (cron + daily briefing + bill reminders) | Morning summaries, CC due date reminders, email digests |
 | 6 | Add image understanding + voice note transcription (Whisper) | Send photos/screenshots/voice notes, get responses |

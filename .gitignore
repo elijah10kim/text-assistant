@@ -15,9 +15,6 @@ node_modules/
 .openclaw/
 workspace/
 
-# BlueBubbles
-bluebubbles/
-
 # OS files
 .DS_Store
 Thumbs.db
