@@ -60,7 +60,3 @@ Copy `.env.example` to `.env` and fill in your API keys. See the example file fo
 | 6 | ⬜ | Image understanding + voice transcription (Whisper) |
 | 7 | ⬜ | Home Assistant + smart home |
 | 8 | ⬜ | Always-on hardening (Mac mini migration) |
-
-## License
-
-MIT
