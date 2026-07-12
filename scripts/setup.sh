@@ -47,8 +47,11 @@ npx openclaw config set agents.defaults.heartbeat.every "0m"
 # "messaging" — the model reports "saved" but has no tool that can actually write the
 # file. Re-added narrowly (no exec, no apply_patch) and scoped to the workspace dir
 # only via tools.fs.workspaceOnly, so this doesn't reopen general filesystem access.
+# "cron" (also coding-only by default) lets the assistant schedule its own recurring
+# jobs from a chat request ("track this and tell me if it changes"), not just run
+# crons an operator set up via CLI.
 npx openclaw config set tools.profile messaging
-npx openclaw config set tools.alsoAllow '["group:web", "group:memory", "read", "write", "edit"]' --strict-json
+npx openclaw config set tools.alsoAllow '["group:web", "group:memory", "read", "write", "edit", "cron"]' --strict-json
 npx openclaw config set tools.fs.workspaceOnly true --strict-json
 
 # Default verbose mode leaks tool-call activity (e.g. "web_fetch: ...") as its own
