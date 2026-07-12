@@ -106,6 +106,28 @@ npx openclaw cron add \
   --message "Daily memory consolidation. Use sessions_history to review today's conversation in session key agent:main:telegram:direct:$TELEGRAM_ALLOWED_USER_ID (the direct chat with Elijah). Read MEMORY.md first so you don't duplicate what's already saved. Identify anything durable worth keeping long-term: decisions made, preferences stated, facts about Elijah, things researched or compared, ongoing goals or interests. Write concise, factual entries, no narration: lasting facts/preferences go in MEMORY.md, a log of what happened goes in memory/YYYY-MM-DD.md for today's date (create memory/ if it doesn't exist). If nothing noteworthy happened today, do nothing -- don't write empty or filler entries. This is a silent background task, do not send a message to any chat." \
   --token "$GATEWAY_TOKEN"
 
+# Optional: flight-search MCP server (Ignav), our own Python MCP server in mcp/flights/.
+# Only wired up if IGNAV_API_KEY is set in .env. OpenClaw sanitizes the environment it
+# passes to MCP child processes, so the key does NOT inherit from the gateway's .env —
+# it must be injected explicitly into the server's config (lands in openclaw.json, 600,
+# same as the Telegram token).
+if [ -n "${IGNAV_API_KEY:-}" ] && [[ "$IGNAV_API_KEY" != *"your-actual"* ]]; then
+  FLIGHTS_DIR="$(pwd)/mcp/flights"
+  python3 -m venv "$FLIGHTS_DIR/.venv"
+  "$FLIGHTS_DIR/.venv/bin/pip" install --quiet -r "$FLIGHTS_DIR/requirements.txt"
+  FLIGHTS_JSON=$(FLIGHTS_DIR="$FLIGHTS_DIR" python3 -c "
+import json, os
+d = os.environ['FLIGHTS_DIR']
+print(json.dumps({
+    'command': os.path.join(d, '.venv/bin/python'),
+    'args': [os.path.join(d, 'server.py')],
+    'env': {'IGNAV_API_KEY': os.environ['IGNAV_API_KEY']},
+}))
+")
+  npx openclaw mcp set flights "$FLIGHTS_JSON"
+  unset FLIGHTS_JSON
+fi
+
 chmod 600 .env
 find "$HOME/.openclaw" -type f -exec chmod 600 {} \; 2>/dev/null
 find "$HOME/.openclaw" -type d -exec chmod 700 {} \; 2>/dev/null

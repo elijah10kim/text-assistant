@@ -11,6 +11,12 @@
 # Node
 node_modules/
 
+# Python (MCP servers)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
 # OpenClaw workspace data
 .openclaw/
 workspace/

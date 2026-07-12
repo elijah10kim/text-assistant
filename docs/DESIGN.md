@@ -95,6 +95,7 @@ Each integration is implemented as an MCP server or OpenClaw skill that the agen
 | Home Assistant | MCP server or REST API | Control smart devices (Alexa/Google Home devices bridged through HA). Requires setting up Home Assistant as a hub — not yet in place, Phase 9. |
 | Bill reminders | User profile + cron | You tell the assistant your credit card due dates once. It stores them and reminds you X days before each. No bank connection needed. |
 | Plaid (optional, future) | REST API | Only needed if you later want live balance amounts in reminders. Not required for due-date-only reminders. |
+| Flight search (Ignav) | Custom MCP server (`mcp/flights/`, Python) | Search one-way/round-trip fares, get booking links; combined with cron + memory, track a route's price and alert on drops. First custom-built tool server in this project — the template for future ones. |
 | Web search | Built into Claude API | Answer general knowledge questions with current information |
 | Whisper | Standalone, local | Voice note transcription — audio in, text out |
 | Reminders/scheduler | Built into the Gateway (cron) | Trigger notifications, daily briefings, recurring checks |
@@ -204,6 +205,7 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 | Claude API (Sonnet 4.6, light-moderate use) | ~$10-25 depending on message volume |
 | OpenClaw + `imsg` | Free (open source) |
 | Google Calendar + Gmail APIs | $0 (free tier) |
+| Flight data (Ignav API) | $0 (free tier: 1,000 requests, billed only on success) |
 | Telegram bot | $0 (free) |
 | Bill reminders | $0 (stored in user profile, no external API) |
 | Whisper (voice transcription) | Free (runs locally) |
@@ -230,6 +232,7 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 | Voice notes | Yes. Transcribed via a standalone Whisper installation, then processed as text. |
 | Local model (Ollama) | Removed from the design. All reasoning goes through Claude API for simplicity — no model routing logic, no local hardware requirement, no second model to maintain. Trade-off: financial/personal data now transits Anthropic's API (not used for training) rather than staying strictly on-device. |
 | Memory system | OpenClaw's built-in `MEMORY.md` + daily notes (SQLite-backed) instead of a custom-built store — already handles curation, truncation-awareness, and consolidation. No vector/semantic search for now: its default embedding provider is OpenAI, a second cloud provider this project avoids. If needed later, self-hosted via a local embedding-only model (e.g. Ollama), not a cloud API. |
+| Flight data source | Ignav API, wrapped in our own Python MCP server (`mcp/flights/`). Google Flights has no public API (killed in 2018); Amadeus's free tier is ending; Ignav has a real free tier (1,000 requests) and does the hard part — fare *search + pricing*, not just status. 
 
 ## Remaining considerations
 
@@ -306,4 +309,5 @@ A suggested sequence, each phase is independently useful:
 | 6 | Add image understanding + voice note transcription (Whisper) | Send photos/screenshots/voice notes, get responses |
 | 7 | Set up Home Assistant + bridge Alexa/Google Home devices | Smart home control via text |
 | 8 | Harden for always-on (Mac mini migration if needed) | Reliable 24/7 operation |
+| Optional | Add flight search + price tracking (Ignav MCP server, `mcp/flights/`) | Ask it to find flights and watch a route, get pinged on price drops |
 | Optional | Add Plaid for live credit card balances | Reminders include actual dollar amounts, not just due dates |

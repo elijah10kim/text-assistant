@@ -15,6 +15,7 @@ Everything runs on one machine — the MacBook used for development — for now.
 - **Calendar + email** — reads/writes Google Calendar and Gmail, drafts replies, schedules meetings
 - **Image + voice understanding** — send photos or voice notes, get text responses
 - **Smart home control** — manage Alexa/Google Home devices via text (through Home Assistant)
+- **Flight search + price tracking** — find fares and get pinged when a watched route drops (custom Ignav MCP server)
 - **Secondary channel** — Telegram runs on the same Gateway as a backup surface for channel-level iMessage failures
 
 ## Architecture
@@ -60,3 +61,4 @@ Copy `.env.example` to `.env` and fill in your API keys. See the example file fo
 | 6 | ⬜ | Image understanding + voice transcription (Whisper) |
 | 7 | ⬜ | Home Assistant + smart home |
 | 8 | ⬜ | Always-on hardening (Mac mini migration) |
+| Optional | 🔨 | Flight search + price tracking (Ignav MCP server) |
