@@ -128,6 +128,33 @@ print(json.dumps({
   unset FLIGHTS_JSON
 fi
 
+# Optional: Google Workspace MCP server (Gmail read+draft, Calendar view+add
+# events, Tasks) in mcp/google/. Only the venv + registration are scriptable —
+# the OAuth grant itself needs a human in a browser (Google requires this, it
+# cannot be automated) and is NOT run here. If mcp/google/client_secret.json
+# exists (downloaded manually from Google Cloud Console — see mcp/google/README.md)
+# but token.json doesn't yet, this sets up the venv and tells you to run the
+# one-time `python3 authorize.py` step yourself, then re-run this script (or
+# just the mcp set command it prints) to register it.
+GOOGLE_DIR="$(pwd)/mcp/google"
+if [ -f "$GOOGLE_DIR/client_secret.json" ]; then
+  python3 -m venv "$GOOGLE_DIR/.venv"
+  "$GOOGLE_DIR/.venv/bin/pip" install --quiet -r "$GOOGLE_DIR/requirements.txt"
+  if [ -f "$GOOGLE_DIR/token.json" ]; then
+    npx openclaw mcp set google-workspace "$(python3 -c "
+import json
+print(json.dumps({
+    'command': '$GOOGLE_DIR/.venv/bin/python',
+    'args': ['$GOOGLE_DIR/server.py'],
+}))
+")"
+  else
+    echo
+    echo "Google Workspace: venv ready, but not authorized yet. Run this once, then re-run setup:"
+    echo "  cd $GOOGLE_DIR && ./.venv/bin/python authorize.py"
+  fi
+fi
+
 chmod 600 .env
 find "$HOME/.openclaw" -type f -exec chmod 600 {} \; 2>/dev/null
 find "$HOME/.openclaw" -type d -exec chmod 700 {} \; 2>/dev/null

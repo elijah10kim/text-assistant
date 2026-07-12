@@ -3,6 +3,11 @@
 .env.local
 .env.production
 
+# Google OAuth credentials (mcp/google/) — client secret + the token file
+# the OAuth flow writes after you authorize
+mcp/google/client_secret.json
+mcp/google/token.json
+
 # Database files (personal data)
 *.db
 *.sqlite

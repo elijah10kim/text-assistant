@@ -12,7 +12,7 @@ Everything runs on one machine — the MacBook used for development — for now.
 - **Web search** — ask anything, get answers with current information
 - **Memory** — remembers your preferences, habits, and past conversations across sessions
 - **Proactive notifications** — morning briefings, bill reminders, email digests, custom alerts on a schedule
-- **Calendar + email** — reads/writes Google Calendar and Gmail, drafts replies, schedules meetings
+- **Calendar + email + tasks** — reads/searches Gmail and drafts replies (no send capability — see `mcp/google/README.md`), views/creates Calendar events, manages Google Tasks and due dates
 - **Image + voice understanding** — send photos or voice notes, get text responses
 - **Smart home control** — manage Alexa/Google Home devices via text (through Home Assistant)
 - **Flight search + price tracking** — find fares and get pinged when a watched route drops (custom Ignav MCP server)
@@ -56,7 +56,7 @@ Copy `.env.example` to `.env` and fill in your API keys. See the example file fo
 | 1 | 🔨 | OpenClaw + Telegram + Claude API |
 | 2 | ⬜ | Memory (OpenClaw's built-in MEMORY.md + daily notes) |
 | 3 | ⬜ | iMessage via `imsg` (Basic tier, dedicated Apple ID) |
-| 4 | ⬜ | Google Calendar + Gmail |
+| 4 | 🔨 | Gmail + Calendar + Tasks (custom MCP server) |
 | 5 | ⬜ | Proactivity engine (cron + briefings + reminders) |
 | 6 | ⬜ | Image understanding + voice transcription (Whisper) |
 | 7 | ⬜ | Home Assistant + smart home |

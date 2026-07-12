@@ -90,8 +90,7 @@ Each integration is implemented as an MCP server or OpenClaw skill that the agen
 
 | Integration | Protocol | What it enables |
 |---|---|---|
-| Google Calendar | MCP server, self-hosted | Read/write calendar events, check availability, schedule meetings |
-| Gmail | MCP server, self-hosted | Read inbox, draft replies, send emails (with confirmation for important ones) |
+| Google Workspace (Gmail, Calendar, Tasks) | Custom MCP server (`mcp/google/`, Python) | Gmail: search/read inbox, create/list/delete drafts — no send tool exists, so the assistant cannot send mail through this integration (see `mcp/google/README.md`). Calendar: view + create events. Tasks: view, create, and update tasks including due dates. |
 | Home Assistant | MCP server or REST API | Control smart devices (Alexa/Google Home devices bridged through HA). Requires setting up Home Assistant as a hub — not yet in place, Phase 9. |
 | Bill reminders | User profile + cron | You tell the assistant your credit card due dates once. It stores them and reminds you X days before each. No bank connection needed. |
 | Plaid (optional, future) | REST API | Only needed if you later want live balance amounts in reminders. Not required for due-date-only reminders. |
@@ -204,7 +203,7 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 |---|---|
 | Claude API (Sonnet 4.6, light-moderate use) | ~$10-25 depending on message volume |
 | OpenClaw + `imsg` | Free (open source) |
-| Google Calendar + Gmail APIs | $0 (free tier) |
+| Gmail + Calendar + Tasks APIs | $0 (no billing account required; not metered/pay-per-call) |
 | Flight data (Ignav API) | $0 (free tier: 1,000 requests, billed only on success) |
 | Telegram bot | $0 (free) |
 | Bill reminders | $0 (stored in user profile, no external API) |
@@ -232,12 +231,13 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 | Voice notes | Yes. Transcribed via a standalone Whisper installation, then processed as text. |
 | Local model (Ollama) | Removed from the design. All reasoning goes through Claude API for simplicity — no model routing logic, no local hardware requirement, no second model to maintain. Trade-off: financial/personal data now transits Anthropic's API (not used for training) rather than staying strictly on-device. |
 | Memory system | OpenClaw's built-in `MEMORY.md` + daily notes (SQLite-backed) instead of a custom-built store — already handles curation, truncation-awareness, and consolidation. No vector/semantic search for now: its default embedding provider is OpenAI, a second cloud provider this project avoids. If needed later, self-hosted via a local embedding-only model (e.g. Ollama), not a cloud API. |
-| Flight data source | Ignav API, wrapped in our own Python MCP server (`mcp/flights/`). Google Flights has no public API (killed in 2018); Amadeus's free tier is ending; Ignav has a real free tier (1,000 requests) and does the hard part — fare *search + pricing*, not just status. 
+| Flight data source | Ignav API, wrapped in our own Python MCP server (`mcp/flights/`). Google Flights has no public API (killed in 2018); Amadeus's free tier is ending; Ignav has a real free tier (1,000 requests) and does the hard part — fare *search + pricing*, not just status.
+| Gmail/Calendar/Tasks integration | Custom Python MCP server (`mcp/google/`) on Google's stable REST APIs, not Google's own remote MCP servers (`gmailmcp.googleapis.com` etc.) — those are Developer Preview, not GA, and don't cover Tasks at all. OAuth scopes are deliberately narrow: `gmail.readonly` + `gmail.compose` (Google bundles send into `compose`, no draft-only scope exists — the real "can't send" boundary is that the server implements no send tool, not the OAuth grant itself), `calendar.events` (events only, not calendar management), `tasks` (Google's only write-capable Tasks scope). | 
 
 ## Remaining considerations
 
 - **Home Assistant setup.** You'll need to install HA on the same MacBook (or a Raspberry Pi) and add your Alexa/Google Home devices as integrations. This is a well-documented but non-trivial setup — worth its own planning session when you reach Phase 8.
-- **Google OAuth.** Both the Calendar and Gmail MCP servers require OAuth credentials. You'll need to create a Google Cloud project and configure OAuth consent. This is a one-time setup but has a few steps.
+- **Google OAuth — done, but re-run per machine.** Gmail/Calendar/Tasks are live via `mcp/google/`. The interactive consent step (`authorize.py`) can't be scripted — Google requires a real human in a browser — so it has to be re-run once on the Mac mini after migration too; see `mcp/google/README.md`.
 - **Plaid (optional, future).** If you later want live credit card balances in your reminders (not just due dates), Plaid supports all major Canadian banks (RBC, TD, BMO, CIBC, Scotiabank, Tangerine) with a free trial tier. This would go through Claude API like everything else in this design.
 
 ---
@@ -304,7 +304,7 @@ A suggested sequence, each phase is independently useful:
 | 1 | Install OpenClaw + Telegram bot + Claude API key | Working chatbot you can text, with web search |
 | 2 | Wire up memory (OpenClaw's built-in `MEMORY.md` + daily notes) | Assistant remembers you across sessions |
 | 3 | Add iMessage channel via `imsg` (Basic tier, SIP on; dedicated Apple ID) | Same assistant, now reachable over iMessage; Telegram stays as a secondary channel |
-| 4 | Add Google Calendar + Gmail integrations (OAuth setup) | Can read/write your schedule and inbox |
+| 4 | Add Gmail + Calendar + Tasks integrations (custom MCP server, `mcp/google/`) | Can search/draft email, view/add calendar events, manage tasks and due dates |
 | 5 | Add proactivity engine (cron + daily briefing + bill reminders) | Morning summaries, CC due date reminders, email digests |
 | 6 | Add image understanding + voice note transcription (Whisper) | Send photos/screenshots/voice notes, get responses |
 | 7 | Set up Home Assistant + bridge Alexa/Google Home devices | Smart home control via text |
