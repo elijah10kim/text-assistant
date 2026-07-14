@@ -33,9 +33,10 @@ npx openclaw config set channels.telegram.allowFrom "[\"$TELEGRAM_ALLOWED_USER_I
 npx openclaw config set commands.ownerAllowFrom "[\"telegram:$TELEGRAM_ALLOWED_USER_ID\"]" --strict-json
 npx openclaw config set agents.defaults.model.primary "anthropic/claude-sonnet-4-6"
 
-# Disabled per OpenClaw's own guidance: heartbeats default to every 30 minutes
-# and burn real API credits with no proactivity routines configured yet (Phase 5).
-npx openclaw config set agents.defaults.heartbeat.every "0m"
+# "0m" (fully disabled) turned out to also silently break one-off reminders --
+# they route through the same heartbeat mechanism to deliver. "24h" keeps cost
+# low (default is 30m) while keeping reminders working.
+npx openclaw config set agents.defaults.heartbeat.every "24h"
 
 # "coding" is OpenClaw's default profile (shell/file/runtime access) — unnecessary
 # attack surface for a chat-only assistant. "messaging" + web keeps search working
@@ -100,7 +101,7 @@ npx openclaw cron add \
   --agent main \
   --session isolated \
   --tools "read write edit sessions_history sessions_list" \
-  --timeout-seconds 300 \
+  --timeout-seconds 900 \
   --expect-final \
   --no-deliver \
   --message "Daily memory consolidation. Use sessions_history to review today's conversation in session key agent:main:telegram:direct:$TELEGRAM_ALLOWED_USER_ID (the direct chat with Elijah). Read MEMORY.md first so you don't duplicate what's already saved. Identify anything durable worth keeping long-term: decisions made, preferences stated, facts about Elijah, things researched or compared, ongoing goals or interests. Write concise, factual entries, no narration: lasting facts/preferences go in MEMORY.md, a log of what happened goes in memory/YYYY-MM-DD.md for today's date (create memory/ if it doesn't exist). If nothing noteworthy happened today, do nothing -- don't write empty or filler entries. This is a silent background task, do not send a message to any chat." \
