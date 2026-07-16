@@ -11,7 +11,7 @@ Everything runs on one machine — the MacBook used for development — for now.
 - **Chat via iMessage** — text your assistant like a friend, get intelligent responses powered by Claude
 - **Web search** — ask anything, get answers with current information
 - **Memory** — remembers your preferences, habits, and past conversations across sessions
-- **Proactive notifications** — morning briefings, bill reminders, email digests, custom alerts on a schedule
+- **Proactive notifications** — daily morning briefing (weather, calendar, tasks, email), plus one-off "remind me" requests
 - **Calendar + email + tasks** — reads/searches Gmail and drafts replies (no send capability — see `mcp/google/README.md`), views/creates Calendar events, manages Google Tasks and due dates
 - **Image + voice understanding** — send photos or voice notes, get text responses
 - **Smart home control** — manage Alexa/Google Home devices via text (through Home Assistant)
@@ -57,7 +57,7 @@ Copy `.env.example` to `.env` and fill in your API keys. See the example file fo
 | 2 | ⬜ | Memory (OpenClaw's built-in MEMORY.md + daily notes) |
 | 3 | ⬜ | iMessage via `imsg` (Basic tier, dedicated Apple ID) |
 | 4 | 🔨 | Gmail + Calendar + Tasks (custom MCP server) |
-| 5 | ⬜ | Proactivity engine (cron + briefings + reminders) |
+| 5 | 🔨 | Proactivity engine (morning briefing + reminders) |
 | 6 | ⬜ | Image understanding + voice transcription (Whisper) |
 | 7 | ⬜ | Home Assistant + smart home |
 | 8 | ⬜ | Always-on hardening (Mac mini migration) |

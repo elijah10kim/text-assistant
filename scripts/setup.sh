@@ -107,6 +107,24 @@ npx openclaw cron add \
   --message "Daily memory consolidation. Use sessions_history to review today's conversation in session key agent:main:telegram:direct:$TELEGRAM_ALLOWED_USER_ID (the direct chat with Elijah). Read MEMORY.md first so you don't duplicate what's already saved. Identify anything durable worth keeping long-term: decisions made, preferences stated, facts about Elijah, things researched or compared, ongoing goals or interests. Write concise, factual entries, no narration: lasting facts/preferences go in MEMORY.md, a log of what happened goes in memory/YYYY-MM-DD.md for today's date (create memory/ if it doesn't exist). If nothing noteworthy happened today, do nothing -- don't write empty or filler entries. This is a silent background task, do not send a message to any chat." \
   --token "$GATEWAY_TOKEN"
 
+# Morning briefing: weather, today's calendar, tasks due/overdue, overnight email
+# highlights. Uses --session main (not isolated) so it wakes the real agent with its
+# normal tool access and delivers straight into the live chat -- same mechanism as
+# one-off reminders, just on a recurring schedule instead of --at.
+npx openclaw cron add \
+  --name "Morning briefing" \
+  --description "Daily weather, calendar, tasks due/overdue, and overnight email highlights" \
+  --cron "0 9 * * *" \
+  --tz "America/Toronto" \
+  --agent main \
+  --session main \
+  --session-key "agent:main:telegram:direct:$TELEGRAM_ALLOWED_USER_ID" \
+  --wake now \
+  --timeout-seconds 300 \
+  --expect-final \
+  --system-event "It's 9am -- time for Elijah's morning briefing. Check: today's weather (web search), today's calendar events, any tasks due today or overdue, and anything notable in unread email from overnight. Compose a short, natural morning summary covering all of that and send it to him." \
+  --token "$GATEWAY_TOKEN"
+
 # Optional: flight-search MCP server (Ignav), our own Python MCP server in mcp/flights/.
 # Only wired up if IGNAV_API_KEY is set in .env. OpenClaw sanitizes the environment it
 # passes to MCP child processes, so the key does NOT inherit from the gateway's .env —

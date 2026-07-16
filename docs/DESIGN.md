@@ -115,18 +115,16 @@ A scheduler (cron-based) that wakes the agent at configured intervals to check f
 
 | Routine | Default schedule | What it does |
 |---|---|---|
-| Morning briefing | Daily, 9:00 AM | Weather, today's calendar, pending reminders, overnight email summary, any bills due soon |
-| Bill/payment reminders | Daily check, notify when due dates approach | Checks user profile for stored due dates, alerts you X days before each |
-| Custom reminders | User-defined (e.g. every 6 hours, every Monday) | Whatever you've asked it to remind you about |
-| Email digest | Every N hours (configurable) | Scans inbox, surfaces anything that looks important or needs a reply |
+| Morning briefing | Daily, 9:00 AM | Weather, today's calendar, tasks due/overdue, overnight email highlights — built, tested, live |
+| Bill/payment reminders | Folded into the morning briefing | No separate system — bills are just Google Tasks with due dates, so "tasks due/overdue" already covers them |
+| Custom reminders | User-defined, one-off ("remind me at 3pm to...") | The assistant creates these itself via the `cron` tool when you ask — tested, works |
+| Email digest | Folded into the morning briefing | No separate scheduled scan — "overnight email highlights" covers this |
 
-**How proactive notifications work:**
+**How proactive notifications actually work (built, not the original plan):**
 
-1. Cron fires at the scheduled time.
-2. The system gathers fresh context (new emails, calendar for today, stored bill due dates, etc.) using cheap API calls — no LLM involved yet.
-3. Raw context is passed to Claude with the prompt: "Based on this context and what you know about the user, is there anything worth notifying them about right now? If not, stay silent."
-4. If Claude decides yes, it composes a message and sends it via `imsg` to your iMessage.
-5. If Claude decides no, nothing happens — no cost, no noise.
+A cron job with `sessionTarget: main` and `wakeMode: now` wakes the real agent directly — not a separate cheap pre-fetch step. The agent gets an instruction (e.g. "it's 9am, check weather/calendar/tasks/email and brief Elijah"), and since it's a normal turn on the main session, it has its usual tool access and just calls what it needs (`web_search`, `calendar_list_events`, `tasks_list`, `gmail_search`), then composes and sends a reply the same way it would in live chat. One LLM turn, real tool calls, no separate non-LLM gathering stage.
+
+This depends on `agents.defaults.heartbeat.every` being non-zero (see "Resolved decisions" — `"0m"` silently breaks this delivery path entirely, not just periodic check-ins).
 
 ---
 
@@ -232,7 +230,8 @@ A MacBook is fine for development and light use, but sleeps when the lid closes.
 | Local model (Ollama) | Removed from the design. All reasoning goes through Claude API for simplicity — no model routing logic, no local hardware requirement, no second model to maintain. Trade-off: financial/personal data now transits Anthropic's API (not used for training) rather than staying strictly on-device. |
 | Memory system | OpenClaw's built-in `MEMORY.md` + daily notes (SQLite-backed) instead of a custom-built store — already handles curation, truncation-awareness, and consolidation. No vector/semantic search for now: its default embedding provider is OpenAI, a second cloud provider this project avoids. If needed later, self-hosted via a local embedding-only model (e.g. Ollama), not a cloud API. |
 | Flight data source | Ignav API, wrapped in our own Python MCP server (`mcp/flights/`). Google Flights has no public API (killed in 2018); Amadeus's free tier is ending; Ignav has a real free tier (1,000 requests) and does the hard part — fare *search + pricing*, not just status.
-| Gmail/Calendar/Tasks integration | Custom Python MCP server (`mcp/google/`) on Google's stable REST APIs, not Google's own remote MCP servers (`gmailmcp.googleapis.com` etc.) — those are Developer Preview, not GA, and don't cover Tasks at all. OAuth scopes are deliberately narrow: `gmail.readonly` + `gmail.compose` (Google bundles send into `compose`, no draft-only scope exists — the real "can't send" boundary is that the server implements no send tool, not the OAuth grant itself), `calendar.events` (events only, not calendar management), `tasks` (Google's only write-capable Tasks scope). | 
+| Gmail/Calendar/Tasks integration | Custom Python MCP server (`mcp/google/`) on Google's stable REST APIs, not Google's own remote MCP servers (`gmailmcp.googleapis.com` etc.) — those are Developer Preview, not GA, and don't cover Tasks at all. OAuth scopes are deliberately narrow: `gmail.readonly` + `gmail.compose` (Google bundles send into `compose`, no draft-only scope exists — the real "can't send" boundary is that the server implements no send tool, not the OAuth grant itself), `calendar.events` (events only, not calendar management), `tasks` (Google's only write-capable Tasks scope). |
+| Heartbeat interval | `"24h"`, not `"0m"`. Fully disabling heartbeat (Phase 1, for cost reasons) turned out to also silently break any cron job that delivers into the live chat session — one-off reminders and the morning briefing both route through the same heartbeat call to wake the agent and send. A job would fire, get gated by the disabled check, and vanish with no message and no visible error. `"24h"` unblocks that delivery path while keeping periodic cost far below the 30m default. | 
 
 ## Remaining considerations
 
@@ -305,7 +304,7 @@ A suggested sequence, each phase is independently useful:
 | 2 | Wire up memory (OpenClaw's built-in `MEMORY.md` + daily notes) | Assistant remembers you across sessions |
 | 3 | Add iMessage channel via `imsg` (Basic tier, SIP on; dedicated Apple ID) | Same assistant, now reachable over iMessage; Telegram stays as a secondary channel |
 | 4 | Add Gmail + Calendar + Tasks integrations (custom MCP server, `mcp/google/`) | Can search/draft email, view/add calendar events, manage tasks and due dates |
-| 5 | Add proactivity engine (cron + daily briefing + bill reminders) | Morning summaries, CC due date reminders, email digests |
+| 5 | Add proactivity engine (morning briefing cron + custom reminders) | Morning summaries (weather/calendar/tasks/email), one-off "remind me" requests |
 | 6 | Add image understanding + voice note transcription (Whisper) | Send photos/screenshots/voice notes, get responses |
 | 7 | Set up Home Assistant + bridge Alexa/Google Home devices | Smart home control via text |
 | 8 | Harden for always-on (Mac mini migration if needed) | Reliable 24/7 operation |
